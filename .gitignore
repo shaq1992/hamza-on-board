@@ -3,3 +3,4 @@ CLAUDE.md
 docs/
 context/
 .env
+.venv/
