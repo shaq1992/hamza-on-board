@@ -1,23 +1,59 @@
 """Pluggable responder: the only thing the UI State calls to get a reply.
 
-Session 03 replaces the body of ``get_formulae`` with the OpenAI call; the
-signature and the module path are the contract the UI depends on.
+``get_formulae`` asks OpenAI for every equation a physics problem needs --
+formulae, symbol meanings, assumptions -- and never a worked numeric solution.
+The API key is read from the project-root ``.env`` here, never in the UI.
 """
 
-STUB_REPLY = r"""Here are the formulae you will likely need (stub reply -- no model was called):
+import os
+from pathlib import Path
 
-- Newton's second law: $F = m a$
-- Kinematics (constant acceleration): $v = v_0 + a t$, $\;s = v_0 t + \tfrac{1}{2} a t^2$, $\;v^2 = v_0^2 + 2 a s$
-- Kinetic energy: $E_k = \tfrac{1}{2} m v^2$
-- Gravitational potential energy: $E_p = m g h$
+from dotenv import load_dotenv
+from openai import OpenAI
 
-Identify the knowns, pick the equation containing exactly one unknown, and solve.
+MODEL = "gpt-4o-mini"
+
+SYSTEM_PROMPT = """You are a physics tutor who supplies the TOOLS to solve a problem, never the solution.
+
+Given a physics problem, respond in Markdown with these sections:
+
+1. **Principles** -- name every physical principle or law the problem needs (e.g. conservation of energy, Newton's second law, projectile kinematics).
+2. **Equations** -- list EVERY equation required to solve the problem, one per bullet, written in LaTeX between single dollar signs (for example $v = v_0 + a t$). Include intermediate relations the solver will need, not only the final one.
+3. **Symbols** -- define every symbol that appears in the equations, with its SI unit.
+4. **Assumptions** -- state the simplifying assumptions the equations rely on (e.g. neglect air resistance, uniform gravitational field, point mass).
+
+Strict rules:
+- Do NOT solve the problem. Do NOT substitute the numbers from the problem into any equation.
+- Do NOT compute or state a final answer, a numeric result, or a partial numeric result.
+- Do not explain the solution steps in prose; only supply the principles, equations, symbol meanings and assumptions.
 """
+
+MISSING_KEY_MESSAGE = (
+    "OPENAI_API_KEY is not set. Add a line `OPENAI_API_KEY=...` to the project-root "
+    "`.env` file and restart the app."
+)
+
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
 def get_formulae(problem: str) -> str:
     """Return the formulae relevant to ``problem`` as Markdown (LaTeX allowed).
 
-    Stub implementation: ignores the problem text and returns a canned reply.
+    Never raises: a missing key or an API failure comes back as a readable
+    message so the chat page shows it instead of crashing.
     """
-    return STUB_REPLY
+    load_dotenv(_ENV_PATH)
+    if not os.environ.get("OPENAI_API_KEY"):
+        return MISSING_KEY_MESSAGE
+    try:
+        response = OpenAI().responses.create(
+            model=MODEL,
+            instructions=SYSTEM_PROMPT,
+            input=f"Physics problem:\n\n{problem}",
+        )
+        return response.output_text
+    except Exception as exc:  # noqa: BLE001 - every API failure becomes a chat message
+        return (
+            f"Sorry, the request to OpenAI failed ({type(exc).__name__}): {exc}\n\n"
+            "Check the API key, your network connection, or try again in a moment."
+        )

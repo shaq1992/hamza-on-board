@@ -1,8 +1,13 @@
 # phys-formula-for-que
 
 Physics-problem chat app (Reflex + OpenAI). You type a physics problem; the app
-replies with the formulae you need. The reply currently comes from a stub
-responder (no OpenAI call yet).
+replies with every equation needed to solve it -- principles, formulae in LaTeX,
+symbol meanings and assumptions -- and never a worked numeric solution. Replies
+come from OpenAI model **`gpt-4o-mini`** (set in `phys_formula/responder.py`).
+
+`.env` in the project root must hold `OPENAI_API_KEY=...` (gitignored, never
+committed); see "Check the OpenAI key" below. Without it the app still starts,
+and the chat shows a message asking for the key.
 
 ## Setup
 
@@ -26,17 +31,21 @@ if 3000/8000 are busy). Chat history is one shared thread stored in `reflex.db`
 (gitignored) and reloaded on page open. Replies render as Markdown with
 `$...$` LaTeX via KaTeX.
 
-## Swap in a real responder
+## Responder
 
 `phys_formula/responder.py` exposes `get_formulae(problem: str) -> str`
-(Markdown, LaTeX allowed). The UI calls only that function; replace its body
-to wire a model.
+(Markdown, LaTeX allowed). The UI calls only that function. It loads `.env`,
+calls the OpenAI Responses API with `gpt-4o-mini` and a system prompt that
+forbids numeric solving, and turns a missing key or any API error (auth, rate
+limit, network) into a readable chat message rather than a crash.
 
 ## Tests
 
 ```
 .venv/bin/pytest
 ```
+
+The OpenAI client is mocked in every test; the suite never calls the API.
 
 ## Check the OpenAI key
 
