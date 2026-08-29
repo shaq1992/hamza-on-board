@@ -1,4 +1,4 @@
-"""Behavioral tests for the chat State and stub responder (session 02 brief)."""
+"""Behavioral tests for the chat State (session 02 brief; responder mocked since session 03)."""
 
 import sys
 from pathlib import Path
@@ -7,6 +7,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+
+CANNED_REPLY = "- Newton's second law: $F = m a$"
+
+
+@pytest.fixture(autouse=True)
+def canned_responder(monkeypatch):
+    """Never call OpenAI from these tests: the State sees a canned reply."""
+    from phys_formula import state
+
+    monkeypatch.setattr(state, "get_formulae", lambda problem: CANNED_REPLY)
 
 
 @pytest.fixture()
@@ -31,24 +42,23 @@ def drive(gen):
 
 
 # 1 -- prevents an empty assistant bubble hiding broken wiring
-def test_stub_returns_nonempty_string():
-    from phys_formula.responder import get_formulae
-
-    reply = get_formulae("A ball is thrown upward at 10 m/s. How high does it go?")
+def test_responder_returns_nonempty_string(db):
+    s = fresh_state()
+    s.question = "A ball is thrown upward at 10 m/s. How high does it go?"
+    drive(s.submit())
+    reply = s.messages[-1]["content"]
     assert isinstance(reply, str)
     assert reply.strip()
 
 
 # 2 -- prevents the submit flow dropping the user turn or never calling the responder
 def test_submit_appends_user_and_reply(db):
-    from phys_formula.responder import get_formulae
-
     s = fresh_state()
     s.question = "What is F for m=2kg, a=3m/s^2?"
     drive(s.submit())
     assert s.messages[-2:] == [
         {"role": "user", "content": "What is F for m=2kg, a=3m/s^2?"},
-        {"role": "assistant", "content": get_formulae("What is F for m=2kg, a=3m/s^2?")},
+        {"role": "assistant", "content": CANNED_REPLY},
     ]
     assert s.question == ""
     assert s.thinking is False
