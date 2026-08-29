@@ -16,3 +16,6 @@ context/
 reflex.db
 __pycache__/
 reflex.lock/
+
+# Screenshots attached in the chat (session 04)
+uploaded_files/

@@ -96,3 +96,64 @@ def test_missing_key_yields_readable_message(monkeypatch):
 
     assert "OPENAI_API_KEY" in reply and ".env" in reply
     assert constructed == []
+
+
+# ---- session 04: image input -------------------------------------------------
+
+import base64  # noqa: E402
+
+PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+)
+
+
+# 5 -- prevents the image feature silently changing the text-only request shape
+#      (e.g. wrapping input in a list), which is the call E019 verified
+def test_text_only_call_unchanged(monkeypatch, with_key):
+    client = FakeClient()
+    responder = install(monkeypatch, client)
+
+    responder.get_formulae(PROBLEM)
+
+    assert client.calls == [
+        {
+            "model": "gpt-4o-mini",
+            "instructions": responder.SYSTEM_PROMPT,
+            "input": f"Physics problem:\n\n{PROBLEM}",
+        }
+    ]
+
+
+# 6 -- prevents the image being dropped, or sent with the wrong mime/encoding
+#      (model answers the text alone, or the API rejects the part)
+def test_image_call_builds_image_part(monkeypatch, with_key):
+    client = FakeClient()
+    responder = install(monkeypatch, client)
+
+    responder.get_formulae(PROBLEM, PNG_BYTES, "image/png")
+
+    call = client.calls[0]
+    assert call["model"] == "gpt-4o-mini"
+    assert call["instructions"] == responder.SYSTEM_PROMPT
+    assert isinstance(call["input"], list) and len(call["input"]) == 1
+    msg = call["input"][0]
+    assert msg["role"] == "user"
+    parts = msg["content"]
+    text_parts = [p for p in parts if p["type"] == "input_text"]
+    image_parts = [p for p in parts if p["type"] == "input_image"]
+    assert len(text_parts) == 1 and PROBLEM in text_parts[0]["text"]
+    assert len(image_parts) == 1
+    expected = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode()
+    assert image_parts[0]["image_url"] == expected
+
+
+# 7 -- prevents an image-only submit sending an empty prompt beside the image
+def test_image_without_text_uses_default_instruction(monkeypatch, with_key):
+    client = FakeClient()
+    responder = install(monkeypatch, client)
+
+    responder.get_formulae("   ", PNG_BYTES, "image/png")
+
+    parts = client.calls[0]["input"][0]["content"]
+    text = [p for p in parts if p["type"] == "input_text"][0]["text"]
+    assert text.strip() == responder.DEFAULT_IMAGE_INSTRUCTION
