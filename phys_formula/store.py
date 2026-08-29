@@ -18,6 +18,7 @@ class Message(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     role: str
     content: str
+    image: str | None = None  # filename under the upload dir, or None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -37,13 +38,13 @@ def _engine() -> sqlalchemy.engine.Engine:
     return _engines[url]
 
 
-def save_message(role: str, content: str) -> None:
+def save_message(role: str, content: str, image: str | None = None) -> None:
     with Session(_engine()) as s:
-        s.add(Message(role=role, content=content))
+        s.add(Message(role=role, content=content, image=image or None))
         s.commit()
 
 
 def load_messages() -> list[dict[str, str]]:
     with Session(_engine()) as s:
         rows = s.exec(select(Message).order_by(Message.id)).all()
-    return [{"role": r.role, "content": r.content} for r in rows]
+    return [{"role": r.role, "content": r.content, "image": r.image or ""} for r in rows]

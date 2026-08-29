@@ -5,6 +5,7 @@ formulae, symbol meanings, assumptions -- and never a worked numeric solution.
 The API key is read from the project-root ``.env`` here, never in the UI.
 """
 
+import base64
 import os
 from pathlib import Path
 
@@ -33,14 +34,36 @@ MISSING_KEY_MESSAGE = (
     "`.env` file and restart the app."
 )
 
+DEFAULT_IMAGE_INSTRUCTION = "Solve the problem shown in the image."
+
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 
 
-def get_formulae(problem: str) -> str:
+def _build_input(problem: str, image: bytes | None, mime: str | None):
+    """Text-only calls keep the session-03 string input; an image adds a content-part list."""
+    if image is None:
+        return f"Physics problem:\n\n{problem}"
+    text = f"Physics problem:\n\n{problem}" if problem.strip() else DEFAULT_IMAGE_INSTRUCTION
+    data_url = f"data:{mime};base64,{base64.b64encode(image).decode('ascii')}"
+    return [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": text},
+                {"type": "input_image", "image_url": data_url},
+            ],
+        }
+    ]
+
+
+def get_formulae(problem: str, image: bytes | None = None, mime: str | None = None) -> str:
     """Return the formulae relevant to ``problem`` as Markdown (LaTeX allowed).
 
-    Never raises: a missing key or an API failure comes back as a readable
-    message so the chat page shows it instead of crashing.
+    ``image`` (raw PNG/JPEG/WebP bytes) and its ``mime`` type are optional; when
+    given, the screenshot is sent to the model alongside the text (or a default
+    instruction if the text is blank). Never raises: a missing key or an API
+    failure comes back as a readable message so the chat page shows it instead
+    of crashing.
     """
     load_dotenv(_ENV_PATH)
     if not os.environ.get("OPENAI_API_KEY"):
@@ -49,7 +72,7 @@ def get_formulae(problem: str) -> str:
         response = OpenAI().responses.create(
             model=MODEL,
             instructions=SYSTEM_PROMPT,
-            input=f"Physics problem:\n\n{problem}",
+            input=_build_input(problem, image, mime),
         )
         return response.output_text
     except Exception as exc:  # noqa: BLE001 - every API failure becomes a chat message
