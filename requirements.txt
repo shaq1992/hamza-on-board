@@ -1,0 +1,4 @@
+openai==3.6.0
+python-dotenv==1.2.3
+reflex[db]==0.9.9
+pytest==9.1.1

@@ -1,5 +1,21 @@
+*.db
+*.py[cod]
+assets/external/
+.web
+.states
 .claude/
 CLAUDE.md
 docs/
 context/
 .env
+.venv/
+
+# Reflex build/runtime artifacts
+.web/
+.states/
+reflex.db
+__pycache__/
+reflex.lock/
+
+# Screenshots attached in the chat (session 04)
+uploaded_files/
